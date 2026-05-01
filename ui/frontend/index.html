@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stampede Alert — Authority</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* ── Per-zone inference overlay ── */
+        .zone-feed-wrap {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+        .zone-feed-wrap img,
+        .zone-feed-wrap video {
+            width: 100%;
+            display: block;
+            border-radius: 4px;
+        }
+
+        /* ── Prediction badge pinned top-right of feed ── */
+        .zone-pred-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 4px 10px 3px;
+            border-radius: 4px;
+            font-size: 0.62rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.10em;
+            backdrop-filter: blur(6px);
+            pointer-events: none;
+            transition: background 0.35s, color 0.35s, box-shadow 0.35s;
+            white-space: nowrap;
+        }
+        .zone-pred-badge.pred-NORMAL       { background: rgba(30,180,90,0.88);  color: #fff; }
+        .zone-pred-badge.pred-PRE_STAMPEDE { background: rgba(210,20,20,0.92);  color: #fff;
+                                             animation: pred-pulse 0.75s ease-in-out infinite alternate; }
+        .zone-pred-badge.pred-MEDIUM       { background: rgba(230,140,0,0.90);  color: #000; }
+        .zone-pred-badge.pred-analysing    { background: rgba(60,60,60,0.80);   color: #bbb; }
+        .zone-pred-badge.pred-error        { background: rgba(120,20,120,0.85); color: #fbb; }
+        .zone-pred-badge.pred-none         { display: none; }
+
+        @keyframes pred-pulse {
+            from { box-shadow: 0 0 0 0   rgba(210,20,20,0.75); }
+            to   { box-shadow: 0 0 0 8px rgba(210,20,20,0);    }
+        }
+
+        /* ── People count badge pinned top-left of feed ── */
+        .zone-count-badge {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            padding: 4px 9px 3px;
+            border-radius: 4px;
+            font-size: 0.62rem;
+            font-weight: 700;
+            backdrop-filter: blur(6px);
+            pointer-events: none;
+            background: rgba(20,20,20,0.80);
+            color: #e0e0e0;
+            white-space: nowrap;
+        }
+        .zone-count-badge.count-analysing { color: #888; }
+
+        /* ── Risk strip below feed ── */
+        .zone-risk-strip {
+            display: none;
+            margin-top: 6px;
+            border-radius: 5px;
+            overflow: hidden;
+            border: 1px solid #252525;
+            font-size: 0.72rem;
+        }
+        .zone-risk-strip.visible { display: block; }
+
+        .zrs-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 10px 4px;
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid #1e1e1e;
+            color: #888;
+        }
+        .zrs-header .zrs-label  { font-weight: 700; font-size: 0.70rem; letter-spacing: 0.06em; }
+        .zrs-header .zrs-meta   { font-size: 0.60rem; color: #555; }
+
+        .zrs-bar-wrap  { padding: 6px 10px 7px; background: rgba(0,0,0,0.18); }
+        .zrs-bar-track { height: 5px; background: #222; border-radius: 3px; overflow: hidden; }
+        .zrs-bar-fill  { height: 100%; border-radius: 3px; transition: width 0.5s ease, background 0.4s; }
+
+        .zrs-stats {
+            display: grid;
+            grid-template-columns: repeat(4,1fr);
+            gap: 3px;
+            padding: 5px 8px 7px;
+            background: rgba(0,0,0,0.12);
+        }
+        .zrs-stat         { text-align: center; background: rgba(255,255,255,0.02); border: 1px solid #1e1e1e; border-radius: 4px; padding: 4px 2px 3px; }
+        .zrs-stat-label   { font-size: 0.52rem; color: #666; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 2px; }
+        .zrs-stat-value   { font-size: 0.82rem; font-weight: 800; }
+        .zrs-stat-value.ok     { color: #27ae60; }
+        .zrs-stat-value.warn   { color: #e6900a; }
+        .zrs-stat-value.danger { color: #e74c3c; }
+        .zrs-stat-value.info   { color: #4fc3f7; }
+
+        .zrs-chart-wrap { display: none; padding: 2px 8px 8px; background: rgba(0,0,0,0.15); }
+        .zrs-chart-wrap.visible { display: block; }
+        .zrs-chart-title { font-size: 0.56rem; color: #555; text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 4px; padding-top: 4px; }
+        canvas.zrs-sparkline { width: 100% !important; height: 56px !important; }
+
+        .zrs-count-chart-wrap { display: none; padding: 2px 8px 8px; background: rgba(0,0,0,0.12); border-top: 1px solid #1a1a1a; }
+        .zrs-count-chart-wrap.visible { display: block; }
+        canvas.zrs-count-sparkline { width: 100% !important; height: 44px !important; }
+
+        /* error strip */
+        .zrs-error-msg { padding: 6px 10px; color: #e74c3c; font-size: 0.68rem; word-break: break-word; }
+
+        /* Spinner */
+        .zrs-spinner {
+            display: inline-block;
+            width: 9px; height: 9px;
+            border: 2px solid #444;
+            border-top-color: #999;
+            border-radius: 50%;
+            animation: spin 0.65s linear infinite;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Crowd level pill */
+        #crowd-level[data-level="Critical"] { background: rgba(200,20,20,0.2);  color: #e74c3c; border-color: rgba(200,20,20,0.4); }
+        #crowd-level[data-level="Warning"]  { background: rgba(220,130,0,0.2);  color: #e6900a; border-color: rgba(220,130,0,0.4); }
+        #crowd-level[data-level="Normal"]   { background: rgba(30,160,80,0.2);  color: #27ae60; border-color: rgba(30,160,80,0.4); }
+
+        #crowd-prediction-label { font-size: 0.68rem; color: #777; margin-top: 4px; letter-spacing: 0.04em; }
+        #crowd-prediction-label.is-prestampede { color: #e74c3c; font-weight: 700; }
+
+        .count-real { color: #4fc3f7; font-weight: 700; }
+        .count-zero { color: #555; }
+        .count-wait { color: #666; font-style: italic; }
+    </style>
+</head>
+<body class="page-authority">
+    <header class="topbar">
+        <div>
+            <h1>Authority dashboard</h1>
+            <p class="subtitle">Real-time stampede detection — model predictions and CSRNet people counts appear on each zone feed.</p>
+        </div>
+        <div class="topbar-actions">
+            <label class="sound-toggle" title="Enable alert sound">
+                <input type="checkbox" id="authority-sound-on" autocomplete="off">
+                <span>Alert sound</span>
+            </label>
+            <span class="url-pill" title="Share with the public">Public page: <code id="public-url"></code></span>
+        </div>
+    </header>
+
+    <main class="layout">
+
+        <section class="card status-card">
+            <h2>Crowd status</h2>
+            <p id="crowd-level" class="level-pill" data-level="—">Loading…</p>
+            <p id="crowd-prediction-label">Waiting for inference…</p>
+            <p class="stat-inline" id="total-registrations">Registered users: —</p>
+            <p class="hint">
+                Crowd level is driven by the stampede model.
+                <strong>Normal</strong> = no risk &nbsp;·&nbsp;
+                <strong>Warning</strong> = score ≥ 0.40 &nbsp;·&nbsp;
+                <strong>Critical</strong> = score ≥ 0.65 (PRE_STAMPEDE).
+                People count comes from the CSRNet density estimator.
+            </p>
+        </section>
+
+        <section class="card broadcast-card">
+            <h2>Broadcast alert</h2>
+            <p class="hint">Send a message to every registered user on the public page.</p>
+            <form id="broadcast-form">
+                <label for="message">Message</label>
+                <textarea id="message" name="message" rows="4"
+                    placeholder="e.g. Please move toward the north exit in an orderly way." required></textarea>
+                <button type="submit">Send alert</button>
+            </form>
+            <p id="send-feedback" class="feedback" aria-live="polite"></p>
+        </section>
+
+        <section class="card video-card">
+            <h2>CCTV zones — Live feeds &amp; Model predictions</h2>
+            <p class="hint">
+                Upload a video to add a zone. The stampede model runs automatically and displays
+                <strong style="color:#27ae60">NORMAL</strong> or
+                <strong style="color:#e74c3c">PRE_STAMPEDE</strong>
+                directly on the feed card along with the <strong style="color:#4fc3f7">CSRNet people count</strong>.
+            </p>
+            <div id="video-feeds" class="video-feed-grid" aria-label="Camera feeds"></div>
+        </section>
+
+        <section class="card upload-card">
+            <h2>Upload CCTV video</h2>
+            <p class="hint">Upload a crowd video — becomes a new zone and the model analyses it automatically.</p>
+            <input type="file" id="videoFile" accept="video/*">
+            <button onclick="uploadVideo()">Upload &amp; Analyse</button>
+            <p id="uploadStatus" class="feedback"></p>
+        </section>
+
+        <section class="card cctv-card">
+            <h2>Zone estimates</h2>
+            <p class="hint">Per-zone CSRNet people count and model prediction. Count shows <span class="count-wait">Analysing…</span> while the model runs.</p>
+            <div class="table-wrap">
+                <table class="data-table" id="cctv-table">
+                    <thead>
+                        <tr>
+                            <th>Camera</th>
+                            <th>Label</th>
+                            <th>Feed state</th>
+                            <th>People (CSRNet)</th>
+                            <th>Model prediction</th>
+                            <th>Risk score</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card presence-card">
+            <h2>Registered users</h2>
+            <p class="hint">Names and IDs from the public registration form.</p>
+            <div class="table-wrap">
+                <table class="data-table" id="presence-table">
+                    <thead>
+                        <tr><th>Name</th><th>ID</th><th>Time</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card alerts-card">
+            <h2>Alert history</h2>
+            <p class="hint">System alerts fire automatically when the model detects PRE_STAMPEDE conditions.</p>
+            <div id="alerts" class="alert-list"></div>
+        </section>
+
+    </main>
+
+    <script src="alert-sound.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+    <script>
+    // ═══════════════════════════════════════════════════════════
+    //  INFERENCE OVERLAY HELPERS
+    // ═══════════════════════════════════════════════════════════
+    const _zoneCharts      = {};
+    const _zoneCountCharts = {};
+
+    function _riskColor(v) {
+        return v >= 0.65 ? '#e74c3c' : v >= 0.40 ? '#e6900a' : '#27ae60';
+    }
+    function _badgeText(level) {
+        if (level === 'HIGH')   return '🚨 PRE_STAMPEDE';
+        if (level === 'MEDIUM') return '⚡ ELEVATED';
+        return '✅ NORMAL';
+    }
+    function _badgeClass(level) {
+        if (level === 'HIGH')   return 'pred-PRE_STAMPEDE';
+        if (level === 'MEDIUM') return 'pred-MEDIUM';
+        return 'pred-NORMAL';
+    }
+
+    // ── Find zone card by data-zone-name attribute (set by script.js)
+    //    or fall back to scanning card text content.
+    function _findCardEl(zoneName) {
+        // Primary: attribute set on the card root by script.js
+        let el = document.querySelector(`[data-zone-name="${CSS.escape(zoneName)}"]`);
+        if (el) return el;
+
+        // Secondary: scan every direct child of #video-feeds
+        for (const child of document.querySelectorAll('#video-feeds > *')) {
+            // Check any heading / label text inside the card
+            const heading = child.querySelector('h3, h4, .zone-title, .zone-name, [class*="title"], [class*="name"]');
+            if (heading && heading.textContent.trim() === zoneName) return child;
+            // Fallback: any element whose text exactly contains the zone name
+            if (child.textContent.includes(zoneName)) return child;
+        }
+        return null;
+    }
+
+    // ── Ensure the risk strip DOM exists inside a card ──
+    function _ensureStrip(cardEl, zoneName) {
+        let strip = cardEl.querySelector('.zone-risk-strip');
+        if (strip) return strip;
+
+        strip = document.createElement('div');
+        strip.className = 'zone-risk-strip';
+        strip.dataset.zone = zoneName;
+        strip.innerHTML = `
+            <div class="zrs-header">
+                <span class="zrs-label">—</span>
+                <span class="zrs-meta"></span>
+            </div>
+            <div class="zrs-bar-wrap">
+                <div class="zrs-bar-track">
+                    <div class="zrs-bar-fill" style="width:0%;background:#444"></div>
+                </div>
+            </div>
+            <div class="zrs-stats" style="display:none"></div>
+            <div class="zrs-chart-wrap">
+                <div class="zrs-chart-title">Risk score timeline</div>
+                <canvas class="zrs-sparkline"></canvas>
+            </div>
+            <div class="zrs-count-chart-wrap">
+                <div class="zrs-chart-title">People count timeline (CSRNet)</div>
+                <canvas class="zrs-count-sparkline"></canvas>
+            </div>`;
+
+        const wrap = cardEl.querySelector('.zone-feed-wrap') || cardEl;
+        wrap.parentNode.insertBefore(strip, wrap.nextSibling);
+        return strip;
+    }
+
+    // ── Ensure prediction badge (top-right) ──
+    function _ensureBadge(cardEl) {
+        let badge = cardEl.querySelector('.zone-pred-badge');
+        if (!badge) {
+            const wrap = cardEl.querySelector('.zone-feed-wrap');
+            if (wrap) {
+                badge = document.createElement('div');
+                badge.className = 'zone-pred-badge pred-none';
+                wrap.appendChild(badge);
+            }
+        }
+        return badge;
+    }
+
+    // ── Ensure people-count badge (top-left) ──
+    function _ensureCountBadge(cardEl) {
+        let badge = cardEl.querySelector('.zone-count-badge');
+        if (!badge) {
+            const wrap = cardEl.querySelector('.zone-feed-wrap');
+            if (wrap) {
+                badge = document.createElement('div');
+                badge.className = 'zone-count-badge';
+                wrap.appendChild(badge);
+            }
+        }
+        return badge;
+    }
+
+    // ── Apply completed inference result to a card ──
+    function _applyDone(cardEl, zoneName, inf) {
+        const strip  = _ensureStrip(cardEl, zoneName);
+        const level  = inf.overall_risk || 'NORMAL';
+        const pred   = inf.overall_prediction || (level === 'HIGH' ? 'PRE_STAMPEDE' : 'NORMAL');
+        const peak   = inf.peak_risk;
+        const rows   = inf.rows || [];
+        const peakV  = peak ? peak.smooth : 0;
+        const highC  = rows.filter(r => r.level === 'HIGH').length;
+        const medC   = rows.filter(r => r.level === 'MEDIUM').length;
+        const dur    = inf.duration_sec ? `${inf.duration_sec}s` : '';
+
+        // Latest people count — prefer last row's people_count, fall back to top-level
+        const latestCount = rows.length
+            ? (rows[rows.length - 1].people_count != null
+                ? rows[rows.length - 1].people_count
+                : (inf.latest_people_count || 0))
+            : (inf.latest_people_count || 0);
+
+        strip.classList.add('visible');
+
+        // Remove any prior error message
+        const priorErr = strip.querySelector('.zrs-error-msg');
+        if (priorErr) priorErr.remove();
+
+        // Header
+        const hdr = strip.querySelector('.zrs-label');
+        hdr.textContent = pred;
+        hdr.style.color = level === 'HIGH' ? '#e74c3c' : level === 'MEDIUM' ? '#e6900a' : '#27ae60';
+        strip.querySelector('.zrs-meta').textContent =
+            dur ? `${dur} · ${inf.total_windows} windows` : '';
+
+        // Risk score bar (peak)
+        const fill = strip.querySelector('.zrs-bar-fill');
+        fill.style.width      = (peakV * 100).toFixed(1) + '%';
+        fill.style.background = _riskColor(peakV);
+
+        // Prediction badge (top-right)
+        const badge = _ensureBadge(cardEl);
+        if (badge) {
+            badge.className   = `zone-pred-badge ${_badgeClass(level)}`;
+            badge.textContent = _badgeText(level);
+        }
+
+        // People count badge (top-left)
+        const countBadge = _ensureCountBadge(cardEl);
+        if (countBadge) {
+            countBadge.className   = 'zone-count-badge';
+            countBadge.textContent = `👥 ${latestCount} people`;
+        }
+
+        // Stats grid
+        const stats = strip.querySelector('.zrs-stats');
+        stats.style.display = 'grid';
+        stats.innerHTML = `
+            <div class="zrs-stat">
+                <div class="zrs-stat-label">PRE_STAMPEDE</div>
+                <div class="zrs-stat-value ${highC > 0 ? 'danger' : 'ok'}">${highC}</div>
+            </div>
+            <div class="zrs-stat">
+                <div class="zrs-stat-label">Elevated</div>
+                <div class="zrs-stat-value ${medC > 0 ? 'warn' : 'ok'}">${medC}</div>
+            </div>
+            <div class="zrs-stat">
+                <div class="zrs-stat-label">Peak score</div>
+                <div class="zrs-stat-value ${peakV >= 0.65 ? 'danger' : peakV >= 0.40 ? 'warn' : 'ok'}">${peakV.toFixed(3)}</div>
+            </div>
+            <div class="zrs-stat">
+                <div class="zrs-stat-label">People (now)</div>
+                <div class="zrs-stat-value info">${latestCount}</div>
+            </div>`;
+
+        // ── Risk sparkline ──
+        if (rows.length > 1) {
+            const cw = strip.querySelector('.zrs-chart-wrap');
+            cw.classList.add('visible');
+            const canvas = strip.querySelector('canvas.zrs-sparkline');
+            if (_zoneCharts[zoneName]) { _zoneCharts[zoneName].destroy(); }
+            _zoneCharts[zoneName] = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: rows.map(r => r.t_start.toFixed(1) + 's'),
+                    datasets: [
+                        {
+                            label: 'Raw',
+                            data: rows.map(r => r.raw),
+                            borderColor: 'rgba(130,130,130,0.35)',
+                            backgroundColor: 'transparent',
+                            borderWidth: 1, pointRadius: 0, tension: 0.3,
+                        },
+                        {
+                            label: 'Smooth',
+                            data: rows.map(r => r.smooth),
+                            borderColor: '#e74c3c',
+                            backgroundColor: 'rgba(231,76,60,0.09)',
+                            borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3,
+                        },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { min: 0, max: 1,
+                             ticks: { display: false },
+                             grid: { color: 'rgba(255,255,255,0.03)' } }
+                    }
+                },
+                plugins: [{
+                    id: 'thr',
+                    beforeDraw(chart) {
+                        const { ctx, chartArea: ca, scales } = chart;
+                        if (!ca) return;
+                        [{v:0.65,c:'rgba(210,30,30,0.55)'},{v:0.40,c:'rgba(220,130,0,0.45)'}].forEach(({v,c})=>{
+                            const y = scales.y.getPixelForValue(v);
+                            ctx.save(); ctx.setLineDash([3,3]);
+                            ctx.strokeStyle=c; ctx.lineWidth=1;
+                            ctx.beginPath(); ctx.moveTo(ca.left,y); ctx.lineTo(ca.right,y);
+                            ctx.stroke(); ctx.restore();
+                        });
+                    }
+                }]
+            });
+        }
+
+        // ── People count sparkline ──
+        const countRows = rows.filter(r => r.people_count != null);
+        if (countRows.length > 1) {
+            const ccw = strip.querySelector('.zrs-count-chart-wrap');
+            ccw.classList.add('visible');
+            const ccanvas = strip.querySelector('canvas.zrs-count-sparkline');
+            if (_zoneCountCharts[zoneName]) { _zoneCountCharts[zoneName].destroy(); }
+            _zoneCountCharts[zoneName] = new Chart(ccanvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: countRows.map(r => r.t_start.toFixed(1) + 's'),
+                    datasets: [{
+                        label: 'People',
+                        data: countRows.map(r => r.people_count),
+                        borderColor: '#4fc3f7',
+                        backgroundColor: 'rgba(79,195,247,0.10)',
+                        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { ticks: { display: false, color: '#4fc3f7' },
+                             grid: { color: 'rgba(79,195,247,0.04)' } }
+                    }
+                }
+            });
+        }
+    }
+
+    // ── Show spinner while analysing ──
+    function _applyAnalysing(cardEl, zoneName) {
+        const badge = _ensureBadge(cardEl);
+        if (badge) {
+            badge.className = 'zone-pred-badge pred-analysing';
+            badge.innerHTML = '<span class="zrs-spinner"></span>Analysing…';
+        }
+        const countBadge = _ensureCountBadge(cardEl);
+        if (countBadge) {
+            countBadge.className   = 'zone-count-badge count-analysing';
+            countBadge.textContent = '👥 Analysing…';
+        }
+        const strip = _ensureStrip(cardEl, zoneName);
+        strip.classList.add('visible');
+        const lbl = strip.querySelector('.zrs-label');
+        if (lbl) { lbl.textContent = 'Analysing…'; lbl.style.color = '#666'; }
+    }
+
+    // ── Show error state ──
+    function _applyError(cardEl, zoneName, errMsg) {
+        const badge = _ensureBadge(cardEl);
+        if (badge) {
+            badge.className   = 'zone-pred-badge pred-error';
+            badge.textContent = '⚠ Error';
+        }
+        const countBadge = _ensureCountBadge(cardEl);
+        if (countBadge) {
+            countBadge.className   = 'zone-count-badge';
+            countBadge.textContent = '👥 —';
+        }
+        const strip = _ensureStrip(cardEl, zoneName);
+        strip.classList.add('visible');
+        const lbl = strip.querySelector('.zrs-label');
+        if (lbl) { lbl.textContent = 'Inference error'; lbl.style.color = '#e74c3c'; }
+
+        // Show the actual error message so you can debug it
+        let errEl = strip.querySelector('.zrs-error-msg');
+        if (!errEl) {
+            errEl = document.createElement('div');
+            errEl.className = 'zrs-error-msg';
+            strip.appendChild(errEl);
+        }
+        errEl.textContent = errMsg || 'Unknown error';
+    }
+
+    // ── Attach overlays from /api/status zone data ──
+    function attachOverlays(zones) {
+        zones.forEach(zone => {
+            const inf = zone.inference;
+            if (!inf || inf.status === 'none') return;
+            const cardEl = _findCardEl(zone.name);
+            if (!cardEl) return;
+
+            if (inf.status === 'running' || inf.status === 'queued') {
+                _applyAnalysing(cardEl, zone.name);
+            } else if (inf.status === 'done') {
+                _applyDone(cardEl, zone.name, inf);
+            } else if (inf.status === 'error') {
+                _applyError(cardEl, zone.name, inf.error);
+            }
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  STATUS POLL
+    // ═══════════════════════════════════════════════════════════
+    const STATUS_INTERVAL = 4000;
+
+    async function fetchStatus() {
+        try {
+            const data = await fetch('/api/status').then(r => r.json());
+
+            // ── Crowd level pill ──
+            const pill    = document.getElementById('crowd-level');
+            const predLbl = document.getElementById('crowd-prediction-label');
+            if (pill) {
+                pill.textContent   = data.level;
+                pill.dataset.level = data.level;
+            }
+            if (predLbl) {
+                let worstPred = 'NORMAL', worstScore = 0;
+                (data.zones || []).forEach(z => {
+                    const inf = z.inference || {};
+                    if (inf.status === 'done') {
+                        const pk = inf.peak_risk ? inf.peak_risk.smooth : 0;
+                        if (pk > worstScore) { worstScore = pk; worstPred = inf.overall_prediction || 'NORMAL'; }
+                    }
+                });
+                const anyDone    = (data.zones || []).some(z => z.inference?.status === 'done');
+                const anyRunning = (data.zones || []).some(
+                    z => z.inference?.status === 'running' || z.inference?.status === 'queued');
+                const anyError   = (data.zones || []).some(z => z.inference?.status === 'error');
+
+                if (!anyDone && anyRunning) {
+                    predLbl.textContent = '⏳ Model is analysing uploaded video…';
+                    predLbl.className   = '';
+                } else if (!anyDone && anyError) {
+                    const errZone = (data.zones || []).find(z => z.inference?.status === 'error');
+                    predLbl.textContent = `⚠ Inference error: ${errZone?.inference?.error || 'check server logs'}`;
+                    predLbl.className   = 'is-prestampede';
+                } else if (!anyDone) {
+                    predLbl.textContent = 'Upload a video to start analysis';
+                    predLbl.className   = '';
+                } else if (data.level === 'Critical') {
+                    predLbl.textContent = '⚠ Model: PRE_STAMPEDE detected — take action';
+                    predLbl.className   = 'is-prestampede';
+                } else if (data.level === 'Warning') {
+                    predLbl.textContent = `Model: elevated risk (peak score ${worstScore.toFixed(3)})`;
+                    predLbl.className   = '';
+                } else {
+                    predLbl.textContent = `Model: NORMAL — no PRE_STAMPEDE signal (peak score ${worstScore.toFixed(3)})`;
+                    predLbl.className   = '';
+                }
+            }
+
+            const reg = document.getElementById('total-registrations');
+            if (reg) reg.textContent = `Registered users: ${data.total_registrations}`;
+
+            // ── Alerts list ──
+            const alertsDiv = document.getElementById('alerts');
+            if (alertsDiv) {
+                alertsDiv.innerHTML = (data.alerts || []).map(a => `
+                    <div class="alert-item alert-${a.source}">
+                        <span class="alert-msg">${a.message}</span>
+                        <span class="alert-meta">${a.source} · ${new Date(a.ts*1000).toLocaleTimeString()}</span>
+                    </div>`).join('') || '<p class="hint">No alerts yet.</p>';
+            }
+
+            // ── CCTV table ──
+            const cctvBody = document.querySelector('#cctv-table tbody');
+            if (cctvBody && data.zones) {
+                cctvBody.innerHTML = data.zones.map(z => {
+                    const inf = z.inference || {};
+
+                    let countCell;
+                    if (inf.status === 'done') {
+                        const cnt = z.cctv_people_estimate;
+                        countCell = cnt > 0
+                            ? `<span class="count-real">👥 ${cnt}</span>`
+                            : `<span class="count-zero">0</span>`;
+                    } else if (inf.status === 'running' || inf.status === 'queued') {
+                        countCell = `<span class="count-wait"><span class="zrs-spinner"></span>Analysing…</span>`;
+                    } else if (inf.status === 'error') {
+                        countCell = `<span style="color:#e74c3c" title="${inf.error || ''}">⚠ Error</span>`;
+                    } else {
+                        countCell = `<span class="count-zero">—</span>`;
+                    }
+
+                    let predCell = '—', scoreCell = '—';
+                    if (inf.status === 'done') {
+                        const pred = inf.overall_prediction || 'NORMAL';
+                        const risk = inf.overall_risk || 'NORMAL';
+                        const col  = pred === 'PRE_STAMPEDE' ? '#e74c3c'
+                                   : risk  === 'MEDIUM'      ? '#e6900a' : '#27ae60';
+                        predCell  = `<span style="color:${col};font-weight:800">${pred}</span>`;
+                        const pk  = inf.peak_risk ? inf.peak_risk.smooth.toFixed(3) : '—';
+                        scoreCell = `<span style="color:${col}">${pk}</span>`;
+                    } else if (inf.status === 'running' || inf.status === 'queued') {
+                        predCell = `<span style="color:#666"><span class="zrs-spinner"></span>…</span>`;
+                    } else if (inf.status === 'error') {
+                        predCell = `<span style="color:#e74c3c" title="${inf.error || ''}">Error</span>`;
+                    }
+
+                    return `<tr>
+                        <td>${z.camera_id}</td>
+                        <td>${z.name}</td>
+                        <td>${z.feed_state}</td>
+                        <td>${countCell}</td>
+                        <td>${predCell}</td>
+                        <td>${scoreCell}</td>
+                    </tr>`;
+                }).join('');
+            }
+
+            // ── Presence table ──
+            const presBody = document.querySelector('#presence-table tbody');
+            if (presBody && data.presence_detail) {
+                presBody.innerHTML = data.presence_detail.map(p => `
+                    <tr>
+                        <td>${p.display_name}</td>
+                        <td><code>${p.anon_id}</code></td>
+                        <td>${new Date(p.ts*1000).toLocaleTimeString()}</td>
+                    </tr>`).join('') ||
+                    '<tr><td colspan="3" style="color:#555">No registrations yet.</td></tr>';
+            }
+
+            // ── Zone inference overlays ──
+            if (data.zones) attachOverlays(data.zones);
+
+        } catch (e) {
+            console.warn('[status] poll failed:', e);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  UPLOAD
+    // ═══════════════════════════════════════════════════════════
+    async function uploadVideo() {
+        const fileInput = document.getElementById('videoFile');
+        const statusEl  = document.getElementById('uploadStatus');
+        if (!fileInput.files.length) { statusEl.textContent = 'Please select a file first.'; return; }
+        const file = fileInput.files[0];
+        statusEl.textContent = 'Uploading…';
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const data = await fetch('/api/upload-video', { method: 'POST', body: fd }).then(r => r.json());
+            if (data.error) throw new Error(data.error);
+            statusEl.textContent = data.inference_message
+                ? `✅ ${data.status} — ${data.inference_message}`
+                : `✅ Uploaded: ${data.filename}`;
+            setTimeout(fetchStatus, 900);
+        } catch (e) {
+            statusEl.textContent = '❌ ' + e.message;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  BOOT
+    // ═══════════════════════════════════════════════════════════
+    const publicUrlEl = document.getElementById('public-url');
+    if (publicUrlEl) publicUrlEl.textContent = location.origin + '/user';
+
+    fetchStatus();
+    setInterval(fetchStatus, STATUS_INTERVAL);
+    </script>
+
+    <script src="script.js"></script>
+</body>
+</html>

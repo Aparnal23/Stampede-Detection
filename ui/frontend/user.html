@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Safety alerts — Register</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-user">
+    <header class="user-header">
+        <div class="user-header-inner">
+            <h1 class="user-title">Safety alerts</h1>
+            <p class=\"user-tagline\">Register with your name to receive official messages broadcast by authorities. Registration details are shared with the authority and system administrators.</p>
+
+        </div>
+    </header>
+
+    <main class="user-main">
+        <section class="card card--soft user-live-status" aria-live="polite">
+            <div class="user-live-status-inner">
+                <div>
+                    <h2 class="user-live-status-heading">Live crowd status</h2>
+                    <p id="user-crowd-level" class="level-pill" data-level="—">Loading…</p>
+                </div>
+                <label class="sound-toggle sound-toggle--user" title="Check to enable audio (required by your browser). You should hear a short test beep.">
+                    <input type="checkbox" id="user-sound-on" autocomplete="off">
+                    <span>Alert sound</span>
+                </label>
+            </div>
+            <p class="hint user-live-status-hint">Status updates while this page is open. A chime plays when the level becomes Warning (if sound is on), and for other new alerts.</p>
+        </section>
+        <section class="register-hero card">
+            <div class="register-hero-glow" aria-hidden="true"></div>
+            <h2 class="register-heading">Register</h2>
+            <p class="register-lead">Enter your name and tap register. Registration will be shared with the authority and system administrators. No location is collected.</p>
+            <label for="user-name">Your name</label>
+            <input type="text" id="user-name" name="name" autocomplete="name" maxlength="120" placeholder="e.g. Alex Kumar" class="input-text">
+            <button type="button" id="btn-register" class="btn-register">Register</button>
+            <p id="checkin-feedback" class="feedback feedback-register" aria-live="polite"></p>
+        </section>
+
+        <section class="card card--soft">
+            <h2>Official alerts</h2>
+            <p class="hint">Broadcast messages from authorities appear below. You will see alerts only if this page is open.</p>
+            <div id="user-alerts" class="alert-list"></div>
+        </section>
+
+        <section class="card card--soft">
+            <h2>Recent registrations</h2>
+            <p class="hint">Others who registered recently (names as entered).</p>
+            <div id="presence-list" class="presence-chips"></div>
+        </section>
+    </main>
+
+    <script src="alert-sound.js"></script>
+    <script src="user.js"></script>
+</body>
+</html>

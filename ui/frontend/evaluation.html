@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Evaluation Metrics — Crowd Level Prediction</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-percent {
+            font-size: 1.2rem;
+            color: #28a745;
+        }
+
+        .metric-percent.warning {
+            color: #ffc107;
+        }
+
+        .metric-percent.critical {
+            color: #dc3545;
+        }
+
+        .confusion-matrix {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            background: white;
+            border: 1px solid #ddd;
+        }
+
+        .confusion-matrix th,
+        .confusion-matrix td {
+            padding: 1rem;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+
+        .confusion-matrix th {
+            background: #f0f0f0;
+            font-weight: bold;
+        }
+
+        .confusion-matrix td.label {
+            background: #f0f0f0;
+            font-weight: bold;
+            text-align: left;
+        }
+
+        .confusion-matrix td.correct {
+            background: #d4edda;
+        }
+
+        .matrix-section {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .metric-class-card {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .metric-class-card h4 {
+            margin: 0 0 1rem 0;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .class-metric {
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .class-metric:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .class-metric-label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+
+        .class-metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .history-section {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        .history-list {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+
+        .history-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-time {
+            color: #999;
+            font-size: 0.8rem;
+        }
+
+        .history-labels {
+            flex: 1;
+            margin-left: 1rem;
+        }
+
+        .label-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+
+        .label-badge.normal {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .label-badge.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .label-badge.critical {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .arrow {
+            color: #999;
+            margin: 0 0.5rem;
+        }
+
+        .status-loading {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+
+        .status-error {
+            text-align: center;
+            padding: 3rem;
+            color: #dc3545;
+        }
+
+        .refresh-btn {
+            margin-top: 1rem;
+            padding: 0.75rem 1.5rem;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        .refresh-btn:hover {
+            background: #0056b3;
+        }
+
+        .last-updated {
+            font-size: 0.85rem;
+            color: #999;
+            margin-top: 1rem;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 2rem;
+            color: #999;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+    </style>
+</head>
+<body class="page-evaluation">
+    <header class="topbar">
+        <div>
+            <h1>Evaluation Metrics</h1>
+            <p class="subtitle">Crowd level prediction accuracy and performance analysis. Compares predicted vs. actual crowd levels from the detection system.</p>
+        </div>
+    </header>
+
+    <main class="layout">
+        <section class="card">
+            <h2>Overall Performance</h2>
+            <div id="metrics-container" class="metrics-grid">
+                <div class="status-loading">Loading metrics...</div>
+            </div>
+            <button class="refresh-btn" id="refresh-btn">Refresh Metrics</button>
+            <div class="last-updated" id="last-updated"></div>
+        </section>
+
+        <section class="card matrix-section" id="confusion-section" style="display: none;">
+            <h2>Confusion Matrix</h2>
+            <p class="hint">Shows predictions vs. actual crowd levels. Diagonal (green) represents correct predictions.</p>
+            <div id="confusion-container"></div>
+        </section>
+
+        <section class="card matrix-section" id="per-class-section" style="display: none;">
+            <h2>Per-Class Performance Metrics</h2>
+            <p class="hint">Precision, Recall, and F1-Score for each crowd level category.</p>
+            <div id="per-class-container" class="metrics-row"></div>
+        </section>
+
+        <section class="card history-section" id="history-section" style="display: none;">
+            <h2>Prediction History</h2>
+            <p class="hint">Last 100 predictions with their actual outcomes. Most recent first.</p>
+            <div id="history-container" class="history-list"></div>
+        </section>
+    </main>
+
+    <script src="evaluation.js"></script>
+</body>
+</html>
